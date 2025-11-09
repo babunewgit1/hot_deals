@@ -25,11 +25,57 @@ let minYear, maxYear, minYearExt, minYearInt, minYearIns, maxYearIns;
 let currentMinPrice;
 let currentMaxPrice;
 
+// Store hot deal prices fetched from API
+let hotDealPrices = {};
+
 // Function to check if user is logged in
 function isUserLoggedIn() {
   const userEmail = Cookies.get("userEmail");
   const authToken = Cookies.get("authToken");
   return !!(userEmail && authToken);
+}
+
+// Function to fetch hot deal pricing from API
+async function fetchHotDealPrice(category) {
+  try {
+    const authToken = Cookies.get("authToken");
+    if (!authToken || !flightRequestId || !category) {
+      console.error("Missing required parameters for hot deal pricing", {
+        hasAuthToken: !!authToken,
+        flightRequestId,
+        category
+      });
+      return null;
+    }
+
+    console.log("Fetching hot deal price for category:", category, "with flightRequestId:", flightRequestId);
+
+    const response = await fetch(
+      "https://operators-dashboard.bubbleapps.io/api/1.1/wf/instant_book_pricing",
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${authToken}`,
+        },
+        body: JSON.stringify({
+          flightrequestid: flightRequestId,
+          category: category,
+        }),
+      }
+    );
+
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`);
+    }
+
+    const data = await response.json();
+    console.log("Hot deal price API response for category", category, ":", data);
+    return data;
+  } catch (error) {
+    console.error("Error fetching hot deal price:", error);
+    return null;
+  }
 }
 
 // Function to re-render current page when login status changes
@@ -552,7 +598,7 @@ function attachPopupCheckboxListeners() {
 }
 
 // Function to render a page of items
-function renderPage(page, filteredSets) {
+async function renderPage(page, filteredSets) {
   const distance = apiData.response.total_distance;
 
   const TimeDown =
@@ -566,6 +612,24 @@ function renderPage(page, filteredSets) {
   // Only render hot deals if user is logged in (security measure)
   const isLoggedIn = isUserLoggedIn();
   if (hotDeals && page === 1 && isLoggedIn) {
+    // Fetch prices for all hot deals
+    const pricePromises = hotDeals.map(async (item) => {
+      const category = item.instant_book_hot_deal_category_text;
+      if (category && !hotDealPrices[category]) {
+        const priceData = await fetchHotDealPrice(category);
+        if (priceData && priceData.response && priceData.response.price) {
+          hotDealPrices[category] = priceData.response.price;
+          console.log(`Hot deal price set for category ${category}:`, priceData.response.price);
+        }
+      }
+    });
+    
+    // Wait for all price fetches to complete
+    await Promise.all(pricePromises);
+    
+    console.log("All hot deal prices fetched:", hotDealPrices);
+    
+    // Now render hot deals with fetched prices
     hotDeals.forEach((item) => {
       createItemBlock(item, globalIndex, true, fragment, distance, TimeDown);
       globalIndex++;
@@ -1107,11 +1171,15 @@ function getHotDealHtml(
   intabWrapper,
   calculateHoursRate,
   uniqueId,
-  isChecked
+  isChecked,
+  hotDealApiPrice
 ) {
   const operatorAddress =
     item.base_airport_fixed_address_geographic_address?.address ||
     "Address not available";
+
+  // Use API price if available, otherwise use calculateTotal
+  const displayPrice = hotDealApiPrice !== null ? hotDealApiPrice.toLocaleString() : calculateTotal;
 
   // Create a new array with both exterior and interior images
   const allImages = [item.exterior_image1_image];
@@ -1170,7 +1238,7 @@ function getHotDealHtml(
         </div>
         <p class="view_price_tologin">LOGIN TO VIEW PRICING</p>
         <div class="price">
-          <h3>$ ${calculateTotal}</h3>
+          <h3>$ ${displayPrice}</h3>
           <h5>$ ${Math.round(calculateHoursRate).toLocaleString()}/hr</h5>
           <p>Taxes calculated at checkout</p>
         </div>
@@ -1178,10 +1246,11 @@ function getHotDealHtml(
 <a  class="bookinglink button fill_button request-book-btn" href="#"  data-flightrequestid="${flightRequestId}" data-type="instant" data-aircraftid="${
     item._id
   }">REQUEST TO BOOK</a>
-          <button data_got_id="${item._id}" data-calculated-price="${parseInt(
-    calculateTotal.replace(/,/g, ""),
-    10
-  )}" class="details-button button fill_button grey_button" data-index="${index}">View Details <img src="https://cdn.prod.website-files.com/6713759f858863c516dbaa19/67459d1f63b186d24efc3bbe_Jettly-Search-Results-Page-(List-View-Details-Tab).png" alt="View Details Icon" />
+          <button data_got_id="${item._id}" data-calculated-price="${
+    hotDealApiPrice !== null 
+      ? Math.round(hotDealApiPrice) 
+      : parseInt(calculateTotal.replace(/,/g, ""), 10)
+  }" class="details-button button fill_button grey_button" data-index="${index}">View Details <img src="https://cdn.prod.website-files.com/6713759f858863c516dbaa19/67459d1f63b186d24efc3bbe_Jettly-Search-Results-Page-(List-View-Details-Tab).png" alt="View Details Icon" />
           </button>
         </div>
       </div>
@@ -2979,15 +3048,41 @@ function createItemBlock(item, index, isHotDeal, fragment, distance, TimeDown) {
     : 1;
 
   let calculatedValue;
-  if (distance / item.cruise_speed_avg_fixedrate_number < 1) {
-    calculatedValue = Math.round(item.price_per_hour_fixedrate_number);
+  let hotDealApiPrice = null; // Store raw API price for hot deals
+  
+  // For hot deals, use API price if available
+  if (isHotDeal) {
+    const category = item.instant_book_hot_deal_category_text;
+    if (category && hotDealPrices[category]) {
+      hotDealApiPrice = hotDealPrices[category]; // Store raw API price
+      calculatedValue = Math.round(hotDealPrices[category]);
+      console.log(`Using raw API price for hot deal (${category}): $${hotDealApiPrice}`);
+    } else {
+      // Fallback to default calculation
+      if (distance / item.cruise_speed_avg_fixedrate_number < 1) {
+        calculatedValue = Math.round(item.price_per_hour_fixedrate_number);
+      } else {
+        calculatedValue = Math.round(
+          (distance / item.cruise_speed_avg_fixedrate_number) *
+            item.price_per_hour_fixedrate_number *
+            multiplier
+        );
+      }
+      console.log(`Using fallback price for hot deal (${category}): $${calculatedValue}`);
+    }
   } else {
-    calculatedValue = Math.round(
-      (distance / item.cruise_speed_avg_fixedrate_number) *
-        item.price_per_hour_fixedrate_number *
-        multiplier
-    );
+    // Regular aircraft calculation
+    if (distance / item.cruise_speed_avg_fixedrate_number < 1) {
+      calculatedValue = Math.round(item.price_per_hour_fixedrate_number);
+    } else {
+      calculatedValue = Math.round(
+        (distance / item.cruise_speed_avg_fixedrate_number) *
+          item.price_per_hour_fixedrate_number *
+          multiplier
+      );
+    }
   }
+  
   const calculateTotal = calculatedValue.toLocaleString();
 
   // Store the calculated value globally for tracking
@@ -3222,7 +3317,8 @@ function createItemBlock(item, index, isHotDeal, fragment, distance, TimeDown) {
       intabWrapper,
       calculateHoursRate,
       uniqueId,
-      isChecked
+      isChecked,
+      hotDealApiPrice
     );
   } else {
     itemWrapper.innerHTML = getRegularItemHtml(
