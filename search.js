@@ -85,6 +85,21 @@ async function fetchHotDealPricing(category, itemElement) {
           detailsButton.setAttribute('data-calculated-price', Math.round(data.response.price));
         }
       }
+
+      // Update fuel stop visibility based on techstops
+      const itemId = itemElement.getAttribute('data-item-id');
+      if (itemId) {
+        const fuelStopElements = document.querySelectorAll(`.hot-deal-fuel-stop[data-item-id="${itemId}"]`);
+        const techstops = data.response.techstops || 0;
+        
+        fuelStopElements.forEach(el => {
+          if (techstops > 0) {
+            el.style.display = 'block';
+          } else {
+            el.style.display = 'none';
+          }
+        });
+      }
     }
   } catch (error) {
     console.error("Error fetching hot deal pricing:", error);
@@ -3246,7 +3261,17 @@ function createItemBlock(item, index, isHotDeal, fragment, distance, TimeDown) {
       }</p>
               </div>   
               ${
-                item.range_number > leg.total_distance__statute_m__number
+                isHotDeal
+                  ? `<div class="fuelstop hot-deal-fuel-stop" style="display: none;" data-item-id="${item._id}">
+                      <p>
+                        <img 
+                          src="https://cdn.prod.website-files.com/6713759f858863c516dbaa19/6753e62479df68bd6de939cd_Jettly-Search-Results-Page-(List-View-Itinerary-Tab).png" 
+                          alt="Fuel Stop Icon" /> 
+                        Possible fuel stop enroute - 
+                        <span>+20 mins</span>
+                      </p>
+                    </div>`
+                  : item.range_number > leg.total_distance__statute_m__number
                   ? ""
                   : item.range_number * 2 >
                     leg.total_distance__statute_m__number
