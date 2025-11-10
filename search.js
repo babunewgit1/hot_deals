@@ -76,6 +76,15 @@ async function fetchHotDealPricing(category, itemElement) {
       if (hourlyRateEl && data.response.hourly_rate) {
         hourlyRateEl.textContent = `$${Math.round(data.response.hourly_rate).toLocaleString()}/hr`;
       }
+
+      // Update the data-calculated-price attribute on the details button
+      const itemWrapper = itemElement.closest('.item_wrapper');
+      if (itemWrapper && data.response.price) {
+        const detailsButton = itemWrapper.querySelector('.details-button');
+        if (detailsButton) {
+          detailsButton.setAttribute('data-calculated-price', Math.round(data.response.price));
+        }
+      }
     }
   } catch (error) {
     console.error("Error fetching hot deal pricing:", error);
@@ -461,13 +470,33 @@ function handleRequestBrBtnClick() {
   const filterleg = leg
     .map((leg) => {
       const dateStart = leg.date_date;
-      const dateObjStart = new Date(dateStart);
-      const formattedDateStart = dateObjStart.toLocaleDateString("en-US", {
+      
+      // Parse date string to prevent timezone shifting
+      let year, month, day;
+      
+      if (typeof dateStart === 'string') {
+        const dateStr = dateStart.split('T')[0]; // Get date part before 'T'
+        [year, month, day] = dateStr.split('-');
+      } else {
+        // If it's a Date object, extract date components directly (no UTC conversion)
+        const dateObj = new Date(dateStart);
+        year = dateObj.getFullYear();
+        month = dateObj.getMonth() + 1; // getMonth() returns 0-11
+        day = dateObj.getDate();
+      }
+      
+      // Create date WITHOUT timezone shifting
+      const selectedDate = new Date(year, month - 1, day);
+      
+      const formattedDateStart = selectedDate.toLocaleDateString("en-US", {
         year: "numeric",
         month: "short",
         day: "numeric",
       });
-      const formattedTimeStart = dateObjStart.toLocaleTimeString("en-US", {
+      
+      // For time formatting
+      const fullDateObj = new Date(dateStart);
+      const formattedTimeStart = fullDateObj.toLocaleTimeString("en-US", {
         hour: "numeric",
         minute: "2-digit",
         hour12: true,
@@ -1237,20 +1266,15 @@ function getHotDealHtml(
         </div>
         <p class="view_price_tologin">LOGIN TO VIEW PRICING</p>
         <div class="price" data-hot-deal-category="${item.instant_book_hot_deal_category_text || ''}" data-item-id="${item._id}">
-          <h3>$ ${calculateTotal}</h3>
-          <h5>$ ${Math.round(calculateHoursRate).toLocaleString()}/hr</h5>
-          <p class="main_price"></p>
-          <p class="hourly_rate"></p>
+          <h3 class="main_price">Loading...</h3>
+          <h5 class="hourly_rate">Loading...</h5>
           <p>Taxes calculated at checkout</p>
         </div>
         <div class="bookingbutton">
 <a  class="bookinglink button fill_button request-book-btn" href="#"  data-flightrequestid="${flightRequestId}" data-type="instant" data-aircraftid="${
     item._id
   }">REQUEST TO BOOK</a>
-          <button data_got_id="${item._id}" data-calculated-price="${parseInt(
-    calculateTotal.replace(/,/g, ""),
-    10
-  )}" class="details-button button fill_button grey_button" data-index="${index}">View Details <img src="https://cdn.prod.website-files.com/6713759f858863c516dbaa19/67459d1f63b186d24efc3bbe_Jettly-Search-Results-Page-(List-View-Details-Tab).png" alt="View Details Icon" />
+          <button data_got_id="${item._id}" class="details-button button fill_button grey_button" data-index="${index}">View Details <img src="https://cdn.prod.website-files.com/6713759f858863c516dbaa19/67459d1f63b186d24efc3bbe_Jettly-Search-Results-Page-(List-View-Details-Tab).png" alt="View Details Icon" />
           </button>
         </div>
       </div>
@@ -3121,10 +3145,6 @@ function createItemBlock(item, index, isHotDeal, fragment, distance, TimeDown) {
         })
         .join("")
     : `<p class="Notfoundarray">Amenities Not Listed? Contact Us for the Latest Details!</p>`;
-
-  // const flightLegs = Array.isArray(apiData.response.flight_legs)
-  //   ? [...apiData.response.flight_legs].reverse()
-  //   : [];
 
   const flightLegs = Array.isArray(apiData.response.flight_legs)
     ? [...apiData.response.flight_legs]
