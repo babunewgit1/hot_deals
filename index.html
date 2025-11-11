@@ -1,0 +1,32 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Document</title>
+  </head>
+  <body>
+    <p class="un" style="text-transform: uppercase"></p>
+
+    <script>
+      document.querySelector(".un").textContent = "undefined";
+    </script>
+
+    <script>
+      document.addEventListener("DOMContentLoaded", function () {
+        const walker = document.createTreeWalker(
+          document.body,
+          NodeFilter.SHOW_TEXT,
+          null,
+          false
+        );
+        let node;
+        while ((node = walker.nextNode())) {
+          if (node.nodeValue.trim() === "undefined") {
+            node.nodeValue = "Contact Us";
+          }
+        }
+      });
+    </script>
+  </body>
+</html>
