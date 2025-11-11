@@ -36,7 +36,6 @@ function isUserLoggedIn() {
 async function fetchHotDealPricing(category, itemElement) {
   try {
     const authToken = Cookies.get("authToken");
-    console.log("Flight Request ID:", flightRequestId);
     if (!authToken || !flightRequestId) {
       return;
     }
@@ -59,11 +58,7 @@ async function fetchHotDealPricing(category, itemElement) {
     if (!response.ok) {
       throw new Error(`HTTP error! status: ${response.status}`);
     }
-
     const data = await response.json();
-
-    console.log("Hot Deal Pricing API Response for category:", category, data);
-
     if (data.status === "success" && data.response) {
       // Update the price elements in the item
       const mainPriceEl = itemElement.querySelector(".main_price");
