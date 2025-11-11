@@ -86,8 +86,13 @@ async function fetchHotDealPricing(category, itemElement) {
         }
       }
 
-      // Update fuel stop visibility based on techstops
+      // Update the global aircraftCalculatedValues with API price for hot deals
       const itemId = itemElement.getAttribute('data-item-id');
+      if (itemId && data.response.price) {
+        window.aircraftCalculatedValues[itemId] = Math.round(data.response.price);
+      }
+
+      // Update fuel stop visibility based on techstops
       if (itemId) {
         const fuelStopElements = document.querySelectorAll(`.hot-deal-fuel-stop[data-item-id="${itemId}"]`);
         const techstops = data.response.techstops || 0;
@@ -110,12 +115,17 @@ async function fetchHotDealPricing(category, itemElement) {
 async function updateHotDealPricing() {
   const hotDealItems = document.querySelectorAll('.hotwrapper .price[data-hot-deal-category]');
   
-  for (const priceElement of hotDealItems) {
+  // Create an array of promises for all API calls
+  const fetchPromises = Array.from(hotDealItems).map(priceElement => {
     const category = priceElement.getAttribute('data-hot-deal-category');
     if (category) {
-      await fetchHotDealPricing(category, priceElement);
+      return fetchHotDealPricing(category, priceElement);
     }
-  }
+    return Promise.resolve();
+  });
+  
+  // Wait for all API calls to complete simultaneously
+  await Promise.all(fetchPromises);
 }
 
 // Function to re-render current page when login status changes
