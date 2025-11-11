@@ -25,11 +25,58 @@ let minYear, maxYear, minYearExt, minYearInt, minYearIns, maxYearIns;
 let currentMinPrice;
 let currentMaxPrice;
 
+// Cache for hot deal pricing data
+let hotDealPricingCache = {};
+
 // Function to check if user is logged in
 function isUserLoggedIn() {
   const userEmail = Cookies.get("userEmail");
   const authToken = Cookies.get("authToken");
   return !!(userEmail && authToken);
+}
+
+// Helper function to update hot deal price elements
+function updateHotDealPriceElements(itemElement, responseData) {
+  // Update the price elements in the item
+  const mainPriceEl = itemElement.querySelector(".main_price");
+  const hourlyRateEl = itemElement.querySelector(".hourly_rate");
+
+  if (mainPriceEl && responseData.price) {
+    mainPriceEl.textContent = `$${Math.round(responseData.price).toLocaleString()}`;
+  }
+
+  if (hourlyRateEl && responseData.hourly_rate) {
+    hourlyRateEl.textContent = `$${Math.round(responseData.hourly_rate).toLocaleString()}/hr`;
+  }
+
+  // Update the data-calculated-price attribute on the details button
+  const itemWrapper = itemElement.closest('.item_wrapper');
+  if (itemWrapper && responseData.price) {
+    const detailsButton = itemWrapper.querySelector('.details-button');
+    if (detailsButton) {
+      detailsButton.setAttribute('data-calculated-price', Math.round(responseData.price));
+    }
+  }
+
+  // Update the global aircraftCalculatedValues with API price for hot deals
+  const itemId = itemElement.getAttribute('data-item-id');
+  if (itemId && responseData.price) {
+    window.aircraftCalculatedValues[itemId] = Math.round(responseData.price);
+  }
+
+  // Update fuel stop visibility based on techstops
+  if (itemId) {
+    const fuelStopElements = document.querySelectorAll(`.hot-deal-fuel-stop[data-item-id="${itemId}"]`);
+    const techstops = responseData.techstops || 0;
+    
+    fuelStopElements.forEach(el => {
+      if (techstops > 0) {
+        el.style.display = 'block';
+      } else {
+        el.style.display = 'none';
+      }
+    });
+  }
 }
 
 // Function to fetch hot deal pricing from API
@@ -38,6 +85,15 @@ async function fetchHotDealPricing(category, itemElement) {
     const authToken = Cookies.get("authToken");
     console.log("Flight Request ID:", flightRequestId);
     if (!authToken || !flightRequestId) {
+      return;
+    }
+
+    // Check if we have cached data for this category
+    const cacheKey = `${flightRequestId}_${category}`;
+    if (hotDealPricingCache[cacheKey]) {
+      // Use cached data immediately
+      const cachedData = hotDealPricingCache[cacheKey];
+      updateHotDealPriceElements(itemElement, cachedData);
       return;
     }
 
@@ -65,46 +121,12 @@ async function fetchHotDealPricing(category, itemElement) {
     console.log("Hot Deal Pricing API Response for category:", category, data);
 
     if (data.status === "success" && data.response) {
-      // Update the price elements in the item
-      const mainPriceEl = itemElement.querySelector(".main_price");
-      const hourlyRateEl = itemElement.querySelector(".hourly_rate");
-
-      if (mainPriceEl && data.response.price) {
-        mainPriceEl.textContent = `$${Math.round(data.response.price).toLocaleString()}`;
-      }
-
-      if (hourlyRateEl && data.response.hourly_rate) {
-        hourlyRateEl.textContent = `$${Math.round(data.response.hourly_rate).toLocaleString()}/hr`;
-      }
-
-      // Update the data-calculated-price attribute on the details button
-      const itemWrapper = itemElement.closest('.item_wrapper');
-      if (itemWrapper && data.response.price) {
-        const detailsButton = itemWrapper.querySelector('.details-button');
-        if (detailsButton) {
-          detailsButton.setAttribute('data-calculated-price', Math.round(data.response.price));
-        }
-      }
-
-      // Update the global aircraftCalculatedValues with API price for hot deals
-      const itemId = itemElement.getAttribute('data-item-id');
-      if (itemId && data.response.price) {
-        window.aircraftCalculatedValues[itemId] = Math.round(data.response.price);
-      }
-
-      // Update fuel stop visibility based on techstops
-      if (itemId) {
-        const fuelStopElements = document.querySelectorAll(`.hot-deal-fuel-stop[data-item-id="${itemId}"]`);
-        const techstops = data.response.techstops || 0;
-        
-        fuelStopElements.forEach(el => {
-          if (techstops > 0) {
-            el.style.display = 'block';
-          } else {
-            el.style.display = 'none';
-          }
-        });
-      }
+      // Cache the response data
+      const cacheKey = `${flightRequestId}_${category}`;
+      hotDealPricingCache[cacheKey] = data.response;
+      
+      // Update the price elements
+      updateHotDealPriceElements(itemElement, data.response);
     }
   } catch (error) {
     console.error("Error fetching hot deal pricing:", error);
@@ -762,9 +784,12 @@ function renderPage(page, filteredSets) {
   attachItemCheckboxListeners();
   updateCheckedItemsDisplay();
   
-  // Fetch and update hot deal pricing if user is logged in
+  // Fetch and update hot deal pricing if user is logged in and hot deals exist on page 1
   if (isLoggedIn && page === 1) {
-    updateHotDealPricing();
+    const hotDealItems = document.querySelectorAll('.hotwrapper .price[data-hot-deal-category]');
+    if (hotDealItems.length > 0) {
+      updateHotDealPricing();
+    }
   }
 
   document.querySelectorAll(".check-box input").forEach((checkbox) => {
