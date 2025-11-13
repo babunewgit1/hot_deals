@@ -40,6 +40,12 @@ async function fetchHotDealPricing(category, itemElement) {
       return;
     }
 
+    // Set loading text
+    const taxesText = itemElement.closest('.item_wrapper')?.querySelector('.price p');
+    if (taxesText) {
+      taxesText.textContent = 'Fetching best pricing...';
+    }
+
     const response = await fetch(
       "https://operators-dashboard.bubbleapps.io/api/1.1/wf/instant_book_pricing",
       {
@@ -100,9 +106,19 @@ async function fetchHotDealPricing(category, itemElement) {
           }
         });
       }
+
+      // Update taxes text back to original after successful load
+      if (taxesText) {
+        taxesText.textContent = 'Taxes calculated at checkout';
+      }
     }
   } catch (error) {
     console.error("Error fetching hot deal pricing:", error);
+    // Reset text to original on error
+    const taxesText = itemElement.closest('.item_wrapper')?.querySelector('.price p');
+    if (taxesText) {
+      taxesText.textContent = 'Taxes calculated at checkout';
+    }
   }
 }
 
@@ -1271,10 +1287,10 @@ function getHotDealHtml(
             <img src="https://cdn.prod.website-files.com/6713759f858863c516dbaa19/67528f529e24322ef8d71586_check.png" alt="Check Icon" />GUARANTEED PRICE
           </p>
           <p>
-            <img src="https://cdn.prod.website-files.com/6713759f858863c516dbaa19/67528f529e24322ef8d71586_check.png" alt="Check Icon" />GUARANTEED AVAILABLE
+            <img src="https://cdn.prod.website-files.com/6713759f858863c516dbaa19/67528f529e24322ef8d71586_check.png" alt="Check Icon" />GUARANTEED AVAILABILITY
           </p>
           <p>
-            <img src="https://cdn.prod.website-files.com/6713759f858863c516dbaa19/67528f529e24322ef8d71586_check.png" alt="Check Icon" />AVAILABLE TO JET CARD HOLDERS ONLY
+            <img src="https://cdn.prod.website-files.com/6713759f858863c516dbaa19/67528f529e24322ef8d71586_check.png" alt="Check Icon" />EXCLUSIVE TO JET CARD HOLDERS
           </p>
         </div>
       </div>
